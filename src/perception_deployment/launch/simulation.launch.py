@@ -4,27 +4,38 @@ from launch_ros.actions import Node
 from launch.actions import ExecuteProcess
 
 def generate_launch_description():
-    # Path to your SDF model
-    model_path = os.path.expanduser('~/robotics_ws/src/perception_deployment/models/camera.sdf')
+    # Paths
+    warehouse_world = os.path.expanduser(
+        '~/robotics_ws/src/perception_deployment/models/warehouse.sdf'
+    )
+    camera_model = os.path.expanduser(
+        '~/robotics_ws/src/perception_deployment/models/camera.sdf'
+    )
+
+    # Fallback: if warehouse.sdf doesn't exist, use empty.world
+    if not os.path.exists(warehouse_world):
+        print("[WARNING] warehouse.sdf not found. Using empty world.")
+        warehouse_world = '/opt/ros/jazzy/share/gazebo_ros/worlds/empty.world'
 
     return LaunchDescription([
-        # 1. Start Gazebo with a warehouse (high complexity for perception)
+        # 1. Start Gazebo
         ExecuteProcess(
-            cmd=['gz', 'sim', '-r', 'warehouse.sdf'],
+            cmd=['gz', 'sim', '-r', warehouse_world],
             output='screen'
         ),
 
-        # 2. Spawn the camera rig
-        ExecuteProcess(
-            cmd=['gz', 'service', '-s', '/world/warehouse/create',
-                 '--reqtype', 'gz.msgs.EntityFactory',
-                 '--replytype', 'gz.msgs.Boolean',
-                 '--timeout', '1000',
-                 '--data', f'file: "{model_path}", name: "realsense"'],
+        # 2. Spawn the camera using ROS2 spawn_node (reliable)
+        Node(
+            package='gazebo_ros',
+            executable='spawn_entity.py',
+            arguments=[
+                '-file', camera_model,
+                '-entity', 'realsense'
+            ],
             output='screen'
         ),
 
-        # 3. Bridge (Maps ALL sensor streams)
+        # 3. Bridge sensor topics
         Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',

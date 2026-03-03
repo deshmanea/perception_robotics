@@ -27,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'managed_percept = perception_deployment.managed_percept:main',
+            'perception_node = perception_deployment.perception_node:main',
         ],
     },
 )
