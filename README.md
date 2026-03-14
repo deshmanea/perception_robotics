@@ -1,6 +1,7 @@
-<h2>Perception in robotics<h2>
+# Perception in robotics
 
 ![alt text](image.png)
+
 
 
 This repository explores how modern robotics systems integrate simulation, perception, and GPU-accelerated deep learning into a unified pipeline.
