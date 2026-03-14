@@ -3,6 +3,10 @@ build/
 install/
 log/
 
+# Model
+*.engine
+*.onnx
+
 # Python cache
 __pycache__/
 *.pyc
