@@ -21,3 +21,8 @@ The objective is not only to run object detection, but to understand the full li
 - Integration with robotics middleware
 
 By incrementally building these components, the repository investigates how perception modules evolve from research prototypes to deployable robotics systems.
+
+
+## System Overview
+
+The current system integrates a simulated camera with a perception pipeline:
