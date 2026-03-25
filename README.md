@@ -4,25 +4,124 @@
 
 
 
-This repository explores how modern robotics systems integrate simulation, perception, and GPU-accelerated deep learning into a unified pipeline.
+# 🚀 TensorRT Perception Pipeline
 
-The project builds a minimal but complete robot perception stack starting from simulation and progressing toward optimized inference deployment. The system combines ROS2, Gazebo simulation, deep learning perception models, and TensorRT GPU inference to study how perception systems used in robotics and autonomous platforms are structured.
+High-performance object detection pipeline using TensorRT and PyCUDA, optimized for low-latency inference and designed for robotics deployment.
 
-The objective is not only to run object detection, but to understand the full lifecycle of a perception system, including:
+---
 
-- Sensor data acquisition from simulation
+## 📌 Overview
 
-- Preprocessing and perception pipelines
+This project implements an end-to-end perception pipeline:
 
-- Deep neural network inference
+```
+Image → Preprocess → TensorRT Inference → Postprocess → Visualization
+```
 
-- GPU-optimized deployment with TensorRT
+The system is designed with **modularity and performance in mind**, making it suitable for real-time robotics applications.
 
-- Integration with robotics middleware
+---
 
-By incrementally building these components, the repository investigates how perception modules evolve from research prototypes to deployable robotics systems.
+## ⚡ Performance
+
+| Stage       | Latency     |
+| ----------- | ----------- |
+| Preprocess  | ~3.4 ms     |
+| Inference   | ~1.1 ms     |
+| Postprocess | ~0.05 ms    |
+| **Total**   | **~4.5 ms** |
+
+👉 **~220 FPS pipeline capability**
+
+---
+
+## 🧠 Key Features
+
+* ⚡ TensorRT optimized inference (FP16)
+* 🚀 PyCUDA-based GPU memory management
+* 🧩 Modular pipeline design
+* 📉 Latency measurement with warmup
+* 🎯 Detection filtering and scaling
+* 🖼️ Visualization utilities
+
+---
+
+## 🗂️ Project Structure
+
+```
+perception_deployment/
+├── trt/
+│   ├── engine.py        # Load TensorRT engine
+│   ├── infer.py         # GPU inference + buffer management
+│   ├── preprocess.py    # Image preprocessing
+│   ├── postprocess.py   # Filtering + scaling
+│
+├── utils/
+│   └── draw.py          # Visualization
+│
+├── test/
+│   └── test_real_inference.py
+```
+
+---
+
+## 🔧 Setup
+
+### 1. Requirements
+
+* Python 3.8+
+* CUDA
+* TensorRT
+* PyCUDA
+* OpenCV
+* NumPy
+
+---
+
+### 2. Run Inference
+
+```
+python3 test/test_real_inference.py
+```
+
+---
+
+## 🧪 Pipeline Details
+
+### Preprocessing
+
+* Resize to 640×640
+* Normalize to [0,1]
+* Convert HWC → CHW
+* Batch dimension added
+
+### Inference
+
+* TensorRT engine execution
+* GPU memory allocation via PyCUDA
+
+### Postprocessing
+
+* Confidence filtering
+* Bounding box scaling to original image
+
+---
+
+## 🧠 Key Learnings
+
+* GPU inference is fast, but preprocessing can become the bottleneck
+* Separating disk I/O from compute is critical for real-time systems
+* CUDA context management is required for PyCUDA
+* Memory layout (contiguous arrays) impacts performance
 
 
-## System Overview
+##  🚀 Next Steps
 
-The current system integrates a simulated camera with a perception pipeline:
+* ROS2 integration for real-time perception
+* Asynchronous CUDA streams for pipeline parallelism
+* Camera input (video stream)
+* Non-Max Suppression (NMS)
+
+## 📸 Example Output
+
+<img src="assets/output_2.jpg" width="750"/>
