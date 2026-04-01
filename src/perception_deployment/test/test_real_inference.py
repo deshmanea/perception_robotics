@@ -7,7 +7,7 @@ import cv2
 
 import time
 
-engine, context = load_engine("yolo.engine")
+engine, context = load_engine("/perception_deployment/yolo.engine")
 inputs, outputs, bindings = allocate_buffers(engine)
 
 orig = cv2.imread("/workspace/src/perception_deployment/images/puppy.png")

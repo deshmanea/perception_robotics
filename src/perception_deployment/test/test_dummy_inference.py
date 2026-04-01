@@ -7,7 +7,7 @@ import numpy as np
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
 # Load the engine
-with open("../yolo.engine", "rb") as f:
+with open("yolo.engine", "rb") as f:
     engine_data = f.read()
 
 runtime = trt.Runtime(TRT_LOGGER)

@@ -28,9 +28,9 @@ def build_engine(onnx_path, engine_path):
         with open(engine_path, "wb") as f:
             f.write(engine.serialize())
 
-        print("✅ Engine built")
+        print("Engine built")
 
 build_engine(
-    "/home/abhijit/robotics_ws/src/perception_deployment/perception_deployment/yolo26n.onnx",
-    "/home/abhijit/robotics_ws/src/perception_deployment/yolo.engine"
+    "/robotics_ws/src/perception_deployment/perception_deployment/yolo26n.onnx",
+    "/robotics_ws/src/perception_deployment/perception_deployment/yolo.engine"
 )

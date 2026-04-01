@@ -1,7 +1,7 @@
 import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import ExecuteProcess
+from launch.actions import ExecuteProcess, TimerAction
 
 def generate_launch_description():
     # Paths
@@ -20,20 +20,25 @@ def generate_launch_description():
     return LaunchDescription([
         # 1. Start Gazebo
         ExecuteProcess(
-            cmd=['gz', 'sim', '-r', warehouse_world],
+            cmd=['gz', 'sim', '-r', '-v', '4', warehouse_world],
             output='screen'
         ),
 
         # 2. Spawn the camera using ROS2 spawn_node (reliable)
-        Node(
-            package='gazebo_ros',
-            executable='spawn_entity.py',
-            arguments=[
-                '-file', camera_model,
-                '-entity', 'realsense'
-            ],
-            output='screen'
-        ),
+        TimerAction(
+            period=2.0,
+            actions=[
+                Node(
+                    package='gazebo_ros',
+                    executable='spawn_entity.py',
+                    arguments=[
+                        '-file', camera_model,
+                        '-entity', 'realsense'
+                    ],
+                    output='screen'
+                )
+            ]
+        )
 
         # 3. Bridge sensor topics
         Node(
@@ -42,8 +47,12 @@ def generate_launch_description():
             arguments=[
                 '/realsense/image@sensor_msgs/msg/Image[gz.msgs.Image',
                 '/realsense/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
-                '/realsense/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
                 '/realsense/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'
+            ],
+            remappings=[
+                ('/realsense/image', '/camera/image_raw'),
+                ('/realsense/depth_image', '/camera/depth/image_raw'),
+                ('/realsense/camera_info', '/camera/camera_info')
             ],
             output='screen'
         )
