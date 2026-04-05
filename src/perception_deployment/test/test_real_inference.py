@@ -26,8 +26,6 @@ t0 = time.time()
 img, orig = preprocess(orig)
 t1 = time.time()
 
-
-
 # -------------------------
 # Inference
 # -------------------------

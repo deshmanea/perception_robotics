@@ -1,7 +1,7 @@
 services:
   isaac_dev:
     build: .
-    container_name: jazzy_yolo_env
+    container_name: perception_humble_env
     network_mode: host
     ipc: host
     privileged: true
@@ -11,11 +11,11 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - .:/workspaces/isaac_ros-dev
+      - .:/robotics_ws
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [gpu, utility, compute, graphics, display]

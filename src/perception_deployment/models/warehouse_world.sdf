@@ -24,10 +24,10 @@
         </include>
 
         <include>
-            <name>Double pendulum</name>
+            <name>Fork Lift</name>
             <static>true</static>
             <pose>1 0 0 0 0 0</pose>
-            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Double pendulum with base</uri>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Forklift</uri>
         </include>
 
         <light type="directional" name="sun">
@@ -38,19 +38,19 @@
         </light>
 
         <light type="spot" name="cone_spotlight">
-            <pose>1.0 0 3.0 0 0 0</pose>
+            <pose>1.0 0 5.0 0 0 0</pose>
             <diffuse>1 1 1 1</diffuse>
             <specular>1 1 1 1</specular>
             <attenuation>
-                <range>10</range>
-                <constant>0.5</constant>
+                <range>30</range>
+                <constant>0.9</constant>
                 <linear>0.01</linear>
             </attenuation>
             <direction>0 0 -1</direction>
             <spot>
-                <inner_angle>0.1</inner_angle>
-                <outer_angle>0.5</outer_angle>
-                <falloff>1.2</falloff>
+                <inner_angle>0.6</inner_angle>
+                <outer_angle>1.6</outer_angle>
+                <falloff>1.0</falloff>
             </spot>
         </light>
 

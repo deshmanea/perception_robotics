@@ -1,5 +1,5 @@
 # ==================================
-# Base: CUDA 12.9 + Ubuntu 24.04
+# Base: CUDA 12.9 + Ubuntu 22.04
 # ==================================
 FROM nvcr.io/nvidia/tensorrt:24.02-py3
 
@@ -9,10 +9,8 @@ SHELL ["/bin/bash", "-c"]
 # ==================================
 # 1. System Dependencies
 # ==================================
-RUN apt update && apt install -y \
-    curl gnupg lsb-release \
-    python3 python3-pip python3-venv \
-    software-properties-common \
+RUN apt-get update && apt-get install -y \
+    curl gnupg \
     git build-essential \
     libopencv-dev python3-opencv \
     && rm -rf /var/lib/apt/lists/*
@@ -21,13 +19,12 @@ RUN apt update && apt install -y \
 # 2. Python Dependencies
 # ==================================
 
-RUN pip install --upgrade pip
+RUN python3 -m pip install --upgrade pip
 
-# ML + colcon inside venv
-RUN pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir \
     numpy==1.26.4 \
     opencv-python-headless==4.8.1.78 \
-    colcon-common-extensions
+    pycuda
 
 # ==================================
 # 3. Add ROS 2 Jammy Repository
@@ -42,7 +39,7 @@ RUN echo "deb [arch=$(dpkg --print-architecture) \
 
 
 # ==================================
-# 5. Install ROS + Gazebo + Bridge
+# 4. Install ROS + Gazebo + Bridge
 # ==================================
 RUN apt update && apt install -y \
     ros-humble-ros-base \
@@ -50,25 +47,23 @@ RUN apt update && apt install -y \
     ros-humble-image-transport \
     ros-humble-vision-msgs \
     ros-humble-rmw-cyclonedds-cpp \
+    python3-colcon-common-extensions \
     python3-rosdep \
     && rm -rf /var/lib/apt/lists/*
 
-RUN rosdep init || true
-RUN rosdep update
+RUN rosdep init || true && rosdep update
 
 # ==================================
-# 6. ROS Workspace
+# 5. ROS Workspace
 # ==================================
 WORKDIR /robotics_ws
-COPY src /robotics_ws/src
 
 RUN source /opt/ros/humble/setup.bash && \
     colcon build
 
 # ==================================
-# 7. Auto Source
+# 6. Auto Source
 # ==================================
-RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
-    echo "source /robotics_ws/install/setup.bash" >> ~/.bashrc
+RUN echo "source /robotics_ws/install/setup.bash" >> ~/.bashrc
 
 CMD ["/bin/bash"]

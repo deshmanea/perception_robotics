@@ -1,3 +1,4 @@
+#!/home/abhijit/.pyenv/versions/perception_env/bin/python
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
@@ -9,139 +10,108 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 # --- TensorRT pipeline imports ---
-from perception_deployment.trt.engine import load_engine
-from perception_deployment.trt.preprocess import preprocess
-from perception_deployment.trt.infer import allocate_buffers, infer
-from perception_deployment.trt.postprocess import filter_detections, scale_boxes
+import rclpy
+from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
+from perception_deployment.trt_bridge import TensorRTInference
+import message_filters
 
-
-class SpatialPerceptionNode(Node):
+class SpatialPerceptionNode(LifecycleNode):
 
     def __init__(self):
-        super().__init__('spatial_engine')
-
-        # --- Core utilities ---
+        super().__init__('perception_engine')
         self.bridge = CvBridge()
+        self.get_logger().info("Node initialized in Unconfigured state")
+        
+        self.declare_parameter('engine_path', 'models/yolo.engine')
+        self.declare_parameter('conf_threshold', 0.5)
 
-        # --- Sensor state ---
-        self.latest_depth = None
-        self.fx = self.fy = self.cx = self.cy = None
+    def on_configure(self, state: State) -> TransitionCallbackReturn:
+        self.get_logger().info("Configuring: Loading TensorRT Engine...")
+        try:
+            # 1. Always get the package directory first
+            package_share = get_package_share_directory('perception_deployment')
+            param_path = self.get_parameter('engine_path').value
+            
+            self.get_logger().info(f"Yolo Engine path > {param_path}")
 
-        # --- Subscribers ---
-        self.image_sub = self.create_subscription(
-            Image, '/realsense/image', self.image_callback, qos_profile_sensor_data
-        )
+            # 2. Construct the absolute path safely
+            if param_path == '':
+                engine_path = os.path.join(package_share, 'models', 'yolo.engine')
+            else:
+                # Now package_share is guaranteed to exist
+                engine_path = os.path.join(package_share, param_path)
 
-        self.depth_sub = self.create_subscription(
-            Image, '/realsense/depth_image', self.depth_callback, qos_profile_sensor_data
-        )
+            self.get_logger().info(f"Loading TensorRT engine from: {engine_path}")
+            
+            # 3. Check and Load
+            if not os.path.exists(engine_path):
+                self.get_logger().error(f"Engine file NOT found at {engine_path}!")
+                return TransitionCallbackReturn.FAILURE
+                
+            self.trt = TensorRTInference(engine_path)
+            
+            # Don't forget the publisher we discussed!
+            self.target_pub = self.create_lifecycle_publisher(Point, 'perception/target_3d', 10)
+            
+            self.get_logger().info("Engine Loaded Successfully")    
+            return TransitionCallbackReturn.SUCCESS
 
-        self.camera_info_sub = self.create_subscription(
-            CameraInfo, '/realsense/camera_info', self.camera_info_callback, qos_profile_sensor_data
-        )
+        except Exception as e:
+            self.get_logger().error(f"Configuration failed: {e}")
+            return TransitionCallbackReturn.FAILURE
 
-        # --- Publisher ---
-        self.target_pub = self.create_publisher(Point, '/perception/target_3d', 10)
+    def on_activate(self, state: State) -> TransitionCallbackReturn:
+        self.get_logger().info("Activating: Subscribing to Camera...")
+        
+        # 3. Synchronized Subscriptions
+        self.img_sub = message_filters.Subscriber(self, Image, 'image_raw')
+        self.depth_sub = message_filters.Subscriber(self, Image, 'depth_raw')
+        self.info_sub = self.create_subscription(CameraInfo, 'camera_info', self.info_cb, 10)
+        
+        self.ts = message_filters.ApproximateTimeSynchronizer(
+            [self.img_sub, self.depth_sub], queue_size=10, slop=0.05)
+        self.ts.registerCallback(self.process_callback)
 
-        # --- TensorRT initialization (loaded once) ---
-        pkg_path = get_package_share_directory('perception_deployment')
-        engine_path = os.path.join(pkg_path, 'yolo.engine')
-        self.engine, self.trt_context, self.trt_runtime = load_engine(engine_path)
-        self.inputs, self.outputs, self.bindings = allocate_buffers(self.engine)
+        return super().on_activate(state)
 
-        self.get_logger().info("Spatial Perception Node (TensorRT) Ready")
+    def info_cb(self, msg):
+        self.fx, self.fy = msg.k[0], msg.k[4]
+        self.cx, self.cy = msg.k[2], msg.k[5]
 
-    # -------------------------
-    # Depth Callback
-    # -------------------------
-    def depth_callback(self, msg):
-        # Store latest depth frame (meters, float32)
-        self.latest_depth = self.bridge.imgmsg_to_cv2(msg, "32FC1")
+    def process_callback(self, img_msg, depth_msg):
+        # The main 'Thin Spine' execution loop
+        cv_img = self.bridge.imgmsg_to_cv2(img_msg, "bgr8")
+        cv_depth = self.bridge.imgmsg_to_cv2(depth_msg, "32FC1")
 
-    # -------------------------
-    # Image Callback (Main Pipeline)
-    # -------------------------
-    def image_callback(self, msg):
-        self.get_logger().info("Image callback triggered")
+        # Run Inference
+        conf = self.get_parameter('conf_threshold').value
+        detections = self.trt.run(cv_img, conf)
 
-        # --- Ensure required data available ---
-        if self.latest_depth is None or self.fx is None:
-            return
+        for det in detections:
+            # Spatial Math (2D -> 3D)
+            u, v = int((det[0]+det[2])/2), int((det[1]+det[3])/2)
+            z = float(np.nanmedian(cv_depth[v-2:v+3, u-2:u+3]))
+            
+            if 0.2 < z < 5.0:
+                x = (u - self.cx) * z / self.fx
+                y = (v - self.cy) * z / self.fy
+                self.target_pub.publish(Point(x=x, y=y, z=z))
 
-        # --- Convert ROS Image → OpenCV ---
-        cv_bgr = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-
-        # --- Preprocess (resize + normalize + letterbox assumed) ---
-        self.get_logger().info("Image converted")
-        img, orig = preprocess(cv_bgr)
-        self.get_logger().info("Preprocess done")
-
-        # --- TensorRT Inference ---
-        output = infer(self.trt_context, self.bindings, self.inputs, self.outputs, img)
-        self.get_logger().info("Inference done")
-
-        # --- Postprocess (NMS + scaling back to original image) ---
-        filtered = filter_detections(output)
-        self.get_logger().info(f"Filter done: {len(filtered)}")
-
-        detections = scale_boxes(filtered, orig.shape)
-
-        self.get_logger().info("Scale done")
-        if len(detections) == 0:
-            return
-
-        # --- Use first detection ---
-        x1, y1, x2, y2, conf, cls = detections[0]
-
-        if conf < 0.25:
-            return
-
-        # --- Compute center pixel ---
-        u = int((x1 + x2) / 2)
-        v = int((y1 + y2) / 2)
-
-        # --- Bounds check ---
-        h, w = self.latest_depth.shape
-        if not (2 <= v < h - 2 and 2 <= u < w - 2):
-            return
-
-        # --- Depth extraction (5x5 median filter) ---
-        window = self.latest_depth[v - 2:v + 3, u - 2:u + 3]
-        depth = np.nanmedian(window)
-
-        if np.isnan(depth) or depth <= 0.1:
-            return
-
-        # --- Pinhole projection (2D → 3D) ---
-        z = float(depth)
-        x = (u - self.cx) * z / self.fx
-        y = (v - self.cy) * z / self.fy
-
-        # --- Publish 3D point ---
-        point = Point(x=x, y=y, z=z)
-        self.target_pub.publish(point)
-
-        self.get_logger().info(
-            f"Target | Conf:{conf:.2f} | X:{x:.2f} Y:{y:.2f} Z:{z:.2f}"
-        )
-
-    # -------------------------
-    # Camera Intrinsics Callback
-    # -------------------------
-    def camera_info_callback(self, msg):
-        self.fx = msg.k[0]
-        self.fy = msg.k[4]
-        self.cx = msg.k[2]
-        self.cy = msg.k[5]
+    def on_deactivate(self, state: State) -> TransitionCallbackReturn:
+        self.get_logger().info("Deactivating: Stopping data flow...")
+        # Clean up subs to save CPU
+        self.img_sub = self.depth_sub = self.ts = None
+        return super().on_deactivate(state)
+    
+    def on_cleanup(self, state: State) -> TransitionCallbackReturn:
+        self.get_logger().info("Cleaning up: Destroying publisher...")
+        self.destroy_publisher(self.target_pub)
+        return TransitionCallbackReturn.SUCCESS
 
 
-# -------------------------
-# Main Entry
-# -------------------------
-def main():
-    rclpy.init()
-    node = SpatialPerceptionNode()
-
+def main(args=None):
+    rclpy.init(args=args)
+    node = SpatialPerceptionNode() # Ensure this matches your class name
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -149,7 +119,6 @@ def main():
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
