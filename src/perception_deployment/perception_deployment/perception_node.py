@@ -10,7 +10,6 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 # --- TensorRT pipeline imports ---
-import rclpy
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from perception_deployment.trt_bridge import TensorRTInference
 import message_filters
@@ -24,6 +23,8 @@ class SpatialPerceptionNode(LifecycleNode):
         
         self.declare_parameter('engine_path', 'models/yolo.engine')
         self.declare_parameter('conf_threshold', 0.5)
+        self.fx = self.fy = self.cx = self.cy = None
+
 
     def on_configure(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info("Configuring: Loading TensorRT Engine...")
@@ -37,36 +38,42 @@ class SpatialPerceptionNode(LifecycleNode):
             # 2. Construct the absolute path safely
             if param_path == '':
                 engine_path = os.path.join(package_share, 'models', 'yolo.engine')
+            elif os.path.isabs(param_path):
+                engine_path = param_path
             else:
-                # Now package_share is guaranteed to exist
                 engine_path = os.path.join(package_share, param_path)
+            
+            self.get_logger().info(f"📂 Engine path: {engine_path}")
 
-            self.get_logger().info(f"Loading TensorRT engine from: {engine_path}")
-            
-            # 3. Check and Load
             if not os.path.exists(engine_path):
-                self.get_logger().error(f"Engine file NOT found at {engine_path}!")
+                self.get_logger().error(f"❌ Engine not found: {engine_path}")
                 return TransitionCallbackReturn.FAILURE
-                
-            self.trt = TensorRTInference(engine_path)
-            
-            # Don't forget the publisher we discussed!
+
+            self.trt = TensorRTInference(engine_path)         
             self.target_pub = self.create_lifecycle_publisher(Point, 'perception/target_3d', 10)
             
-            self.get_logger().info("Engine Loaded Successfully")    
+            self.get_logger().info("Engine Loaded Successfully")   
             return TransitionCallbackReturn.SUCCESS
 
         except Exception as e:
+            import traceback
+            self.get_logger().error(f"❌ Configuration failed: {str(e)}")
+            self.get_logger().error(traceback.format_exc())
             self.get_logger().error(f"Configuration failed: {e}")
             return TransitionCallbackReturn.FAILURE
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info("Activating: Subscribing to Camera...")
-        
+        self.target_pub.on_activate()
         # 3. Synchronized Subscriptions
-        self.img_sub = message_filters.Subscriber(self, Image, 'image_raw')
-        self.depth_sub = message_filters.Subscriber(self, Image, 'depth_raw')
-        self.info_sub = self.create_subscription(CameraInfo, 'camera_info', self.info_cb, 10)
+        self.img_sub = message_filters.Subscriber(
+            self, Image, 'image_raw', qos_profile=qos_profile_sensor_data
+        )
+
+        self.depth_sub = message_filters.Subscriber(
+            self, Image, 'depth_raw', qos_profile=qos_profile_sensor_data
+        )
+        self.info_sub = self.create_subscription(CameraInfo, 'camera_info', self.info_cb, qos_profile_sensor_data)
         
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [self.img_sub, self.depth_sub], queue_size=10, slop=0.05)
@@ -85,12 +92,26 @@ class SpatialPerceptionNode(LifecycleNode):
 
         # Run Inference
         conf = self.get_parameter('conf_threshold').value
-        detections = self.trt.run(cv_img, conf)
+        try:
+            detections = self.trt.run(cv_img, conf)
+        except Exception as e:
+            self.get_logger().error(f"Inference failed: {e}")
+            return
+        
+        if self.fx is None:
+            return
 
         for det in detections:
-            # Spatial Math (2D -> 3D)
-            u, v = int((det[0]+det[2])/2), int((det[1]+det[3])/2)
+            u = int((det[0] + det[2]) / 2)
+            v = int((det[1] + det[3]) / 2)
+
+            h, w = cv_depth.shape
+            u = np.clip(u, 2, w - 3)
+            v = np.clip(v, 2, h - 3)
+
             z = float(np.nanmedian(cv_depth[v-2:v+3, u-2:u+3]))
+            if not np.isfinite(z) or z <= 0:
+                continue
             
             if 0.2 < z < 5.0:
                 x = (u - self.cx) * z / self.fx
@@ -100,18 +121,26 @@ class SpatialPerceptionNode(LifecycleNode):
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info("Deactivating: Stopping data flow...")
         # Clean up subs to save CPU
+        self.target_pub.on_deactivate()
         self.img_sub = self.depth_sub = self.ts = None
         return super().on_deactivate(state)
     
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().info("Cleaning up: Destroying publisher...")
         self.destroy_publisher(self.target_pub)
+        self.trt = None
+        self.img_sub = None
+        self.depth_sub = None
+        self.ts = None
         return TransitionCallbackReturn.SUCCESS
-
+    
+    def on_shutdown(self, state):
+        self.get_logger().info("Shutting down node")
+        return TransitionCallbackReturn.SUCCESS
 
 def main(args=None):
     rclpy.init(args=args)
-    node = SpatialPerceptionNode() # Ensure this matches your class name
+    node = SpatialPerceptionNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

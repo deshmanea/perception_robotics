@@ -16,7 +16,6 @@ def generate_launch_description():
         namespace='',
         output='screen',
         parameters=[config_file],
-        # Remap generic names to your specific hardware topics
         remappings=[
             ('image_raw', '/camera/image_raw'),
             ('depth_raw', '/camera/depth/image_raw'),
