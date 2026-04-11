@@ -43,43 +43,68 @@ class SpatialPerceptionNode(LifecycleNode):
             else:
                 engine_path = os.path.join(package_share, param_path)
             
-            self.get_logger().info(f"📂 Engine path: {engine_path}")
+            self.get_logger().info(f"Engine path: {engine_path}")
 
             if not os.path.exists(engine_path):
-                self.get_logger().error(f"❌ Engine not found: {engine_path}")
+                self.get_logger().error(f"Engine not found: {engine_path}")
                 return TransitionCallbackReturn.FAILURE
 
             self.trt = TensorRTInference(engine_path)         
-            self.target_pub = self.create_lifecycle_publisher(Point, 'perception/target_3d', 10)
+            self.target_pub = self.create_lifecycle_publisher(Point, '/perception/target_3d', 10)
             
             self.get_logger().info("Engine Loaded Successfully")   
+
+            self.img_sub = message_filters.Subscriber(
+                self, Image, '/realsense/image', qos_profile=qos_profile_sensor_data
+            )
+
+            self.depth_sub = message_filters.Subscriber(
+                self, Image, '/realsense/depth_image', qos_profile=qos_profile_sensor_data
+            )
+
+            self.info_sub = self.create_subscription(
+                CameraInfo,
+                '/realsense/camera_info',
+                self.info_cb,
+                qos_profile_sensor_data
+            )
+
+            self.ts = message_filters.ApproximateTimeSynchronizer(
+                [self.img_sub, self.depth_sub],
+                queue_size=10,
+                slop=0.05
+            )
+
+            self.ts.registerCallback(self.process_callback)
+
+            self.get_logger().info("Subscriptions ready")
+
             return TransitionCallbackReturn.SUCCESS
 
         except Exception as e:
             import traceback
-            self.get_logger().error(f"❌ Configuration failed: {str(e)}")
+            self.get_logger().error(f"Configuration failed: {str(e)}")
             self.get_logger().error(traceback.format_exc())
             self.get_logger().error(f"Configuration failed: {e}")
             return TransitionCallbackReturn.FAILURE
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
-        self.get_logger().info("Activating: Subscribing to Camera...")
-        self.target_pub.on_activate()
-        # 3. Synchronized Subscriptions
-        self.img_sub = message_filters.Subscriber(
-            self, Image, 'image_raw', qos_profile=qos_profile_sensor_data
-        )
+        self.get_logger().info("Activating node...")
 
-        self.depth_sub = message_filters.Subscriber(
-            self, Image, 'depth_raw', qos_profile=qos_profile_sensor_data
-        )
-        self.info_sub = self.create_subscription(CameraInfo, 'camera_info', self.info_cb, qos_profile_sensor_data)
-        
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [self.img_sub, self.depth_sub], queue_size=10, slop=0.05)
-        self.ts.registerCallback(self.process_callback)
+        try:
+            if self.target_pub is None:
+                self.get_logger().error("Publisher is None!")
+                return TransitionCallbackReturn.FAILURE
 
-        return super().on_activate(state)
+            self.target_pub.on_activate(state)
+            result = super().on_activate(state) 
+
+            self.get_logger().info("Activation SUCCESS")
+            return TransitionCallbackReturn.SUCCESS
+
+        except Exception as e:
+            self.get_logger().error(f"Activation failed: {e}")
+            return TransitionCallbackReturn.FAILURE
 
     def info_cb(self, msg):
         self.fx, self.fy = msg.k[0], msg.k[4]
@@ -87,6 +112,7 @@ class SpatialPerceptionNode(LifecycleNode):
 
     def process_callback(self, img_msg, depth_msg):
         # The main 'Thin Spine' execution loop
+        self.get_logger().info("📸 Image callback triggered")
         cv_img = self.bridge.imgmsg_to_cv2(img_msg, "bgr8")
         cv_depth = self.bridge.imgmsg_to_cv2(depth_msg, "32FC1")
 
