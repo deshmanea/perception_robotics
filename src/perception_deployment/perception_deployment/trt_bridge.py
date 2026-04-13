@@ -103,11 +103,17 @@ class TensorRTInference:
         return img, r, (dw, dh)
 
     def postprocess(self, detections, orig_shape, ratio, dw, dh, conf_threshold):
-        # Filter and Rescale
+        detections = detections.reshape(-1, 6)
+
+        print("Sample detections:\n", detections[:10])
+
         valid = detections[detections[:, 4] > conf_threshold]
-        if len(valid) == 0: return []
-        
-        # Simple rescaling back to original image
+        if len(valid) == 0:
+            return []
+
+        valid = valid.copy()
+
         valid[:, [0, 2]] = (valid[:, [0, 2]] - dw) / ratio
         valid[:, [1, 3]] = (valid[:, [1, 3]] - dh) / ratio
+
         return valid

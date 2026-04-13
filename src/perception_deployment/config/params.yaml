@@ -1,6 +1,4 @@
 perception_engine:
   ros__parameters:
     engine_path: "models/yolo.engine"
-    conf_threshold: 0.5
-    iou_threshold: 0.45
-    input_size: [640, 640]
+    conf_threshold: 0.05
