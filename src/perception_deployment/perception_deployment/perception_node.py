@@ -11,6 +11,9 @@ from threading import Lock
 from ament_index_python.packages import get_package_share_directory
 import cv2
 
+import time
+from collections import deque
+
 # --- TensorRT pipeline imports ---
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from perception_deployment.trt_bridge import TensorRTInference
@@ -23,6 +26,7 @@ class SensorBuffer:
 
     def update_image(self, img):
         with self.lock:
+            
             self.image = img
 
     def update_depth(self, depth):
@@ -39,6 +43,12 @@ class SpatialPerceptionNode(LifecycleNode):
     def __init__(self):
         super().__init__('perception_engine')
 
+        # --- profiling ---
+        self.proc_times = deque(maxlen=100)
+        self.e2e_times = deque(maxlen=100)
+        self.frame_count = 0
+        self.log_interval = 30
+
         self.bridge = CvBridge()
         self.buffer = SensorBuffer()
         
@@ -49,7 +59,7 @@ class SpatialPerceptionNode(LifecycleNode):
         self.get_logger().info("Node initialized in Unconfigured state")
         
         self.declare_parameter('engine_path', 'models/yolo.engine')
-        self.declare_parameter('conf_threshold', 0.01)
+        self.declare_parameter('conf_threshold', 0.001)
         
         self.trt = None
         self.timer = None
@@ -154,6 +164,11 @@ class SpatialPerceptionNode(LifecycleNode):
     def process_loop(self):
         if not self.is_active:
             return
+        
+        self.frame_count += 1
+        self.get_logger().info("loop alive")
+
+        t_e2e_start = time.perf_counter()
 
         img, depth = self.buffer.get_pair()
 
@@ -162,11 +177,17 @@ class SpatialPerceptionNode(LifecycleNode):
             return
 
         try:
+            t_proc_start = time.perf_counter()
             conf_th = self.get_parameter('conf_threshold').value
 
             img_input = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            detections = self.trt.run(img_input, 0.001)
+            self.get_logger().info(
+                f"Input stats -> shape: {img_input.shape}, "
+                f"min: {img_input.min()}, max: {img_input.max()}, dtype: {img_input.dtype}"
+            )
+
+            detections = self.trt.run(img_input, conf_th)
 
             if detections is None or len(detections) == 0:
                 return
@@ -182,6 +203,9 @@ class SpatialPerceptionNode(LifecycleNode):
             self.get_logger().info(f"Max conf: {np.max(detections[:, 4])}")
 
             detections = detections[detections[:, 4] >= conf_th]
+            self.get_logger().info(
+                f"obj mean: {np.mean(detections[:,4])}, std: {np.std(detections[:,4])}"
+            )
 
             if len(detections) == 0:
                 return
@@ -193,15 +217,8 @@ class SpatialPerceptionNode(LifecycleNode):
             h, w = depth.shape[:2]
 
             for det in detections:
+                x1, y1, x2, y2, obj_conf, cls = det
 
-                x, y, bw, bh, obj_conf, cls = det
-
-                x1 = x - bw / 2
-                y1 = y - bh / 2
-                x2 = x + bw / 2
-                y2 = y + bh / 2
-
-                # clamp bbox
                 x1 = int(np.clip(x1, 0, w - 1))
                 y1 = int(np.clip(y1, 0, h - 1))
                 x2 = int(np.clip(x2, 0, w - 1))
@@ -230,6 +247,15 @@ class SpatialPerceptionNode(LifecycleNode):
                 Y = (v - self.cy) * z / self.fy
 
                 self.target_pub.publish(Point(x=X, y=Y, z=z))
+
+            self.e2e_times.append(time.perf_counter() - t_e2e_start)
+
+            t_proc_end = time.perf_counter()
+            self.proc_times.append(t_proc_end - t_proc_start)
+
+            # log every 30 frames (avoid spam)
+            if self.frame_count % self.log_interval == 0 and len(self.e2e_times) > 0:
+                self.log_stats()
 
         except Exception as e:
             self.get_logger().error(f"Inference error: {e}")
@@ -266,6 +292,21 @@ class SpatialPerceptionNode(LifecycleNode):
     def on_shutdown(self, state):
         self.get_logger().info("Shutting down node")
         return TransitionCallbackReturn.SUCCESS
+    
+    def log_stats(self):
+        if len(self.proc_times) == 0 or len(self.e2e_times) == 0:
+            return
+
+        avg_proc = sum(self.proc_times) / len(self.proc_times)
+        avg_e2e = sum(self.e2e_times) / len(self.e2e_times)
+
+        fps = 1.0 / (avg_e2e + 1e-6)
+
+        self.get_logger().info(
+            f"PERF | Proc: {avg_proc*1000:.2f} ms | "
+            f"E2E: {avg_e2e*1000:.2f} ms | "
+            f"FPS: {fps:.1f}"
+        )
 
 def main(args=None):
     rclpy.init(args=args)
@@ -275,7 +316,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
+        node.destroy_node() 
         rclpy.shutdown()
 
 if __name__ == '__main__':
