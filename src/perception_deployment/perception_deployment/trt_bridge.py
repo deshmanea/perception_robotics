@@ -103,6 +103,11 @@ class TensorRTInference:
         return img, r, (dw, dh)
 
     def postprocess(self, detections, orig_shape, ratio, dw, dh, conf_threshold):
+
+        print("Actual raw shape:", detections.shape)
+        print("Min/Max:", detections.min(), detections.max())
+        print("First row:", detections[:1])
+
         detections = detections.reshape(-1, 6)
 
         print("Sample detections:\n", detections[:10])

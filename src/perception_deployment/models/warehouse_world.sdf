@@ -14,20 +14,20 @@
         </plugin>
 
         <include>
-            <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/Warehouse</uri>
+            <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/warehouse</uri>
         </include>
 
         <include>
             <name>my_camera</name>
-            <pose>-1 0 2 0 0.4 0</pose>
+            <pose>-1.2 0 1.2 0 -0.2 0</pose>
             <uri>model://realsense_rig</uri> 
         </include>
 
         <include>
-            <name>Fork Lift</name>
+            <name>person</name>
             <static>true</static>
-            <pose>1 0 0 0 0 0</pose>
-            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Forklift</uri>
+            <pose>0 0 0.001 0 0 -1.5</pose>
+            <uri>model://person_standing</uri>
         </include>
 
         <light type="directional" name="sun">
