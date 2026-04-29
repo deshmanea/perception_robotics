@@ -27,10 +27,12 @@ class SensorBuffer:
         with self.lock:
             
             self.image = img
+            print("IMAGE UPDATED")
 
     def update_depth(self, depth):
         with self.lock:
             self.depth = depth
+            print("DEPTH UPDATED")
 
     def get_pair(self):
         with self.lock:
@@ -58,7 +60,7 @@ class SpatialPerceptionNode(LifecycleNode):
         self.get_logger().info("Node initialized in Unconfigured state")
         
         self.declare_parameter('engine_path', 'models/yolo.engine')
-        self.declare_parameter('conf_threshold', 0.001)
+        self.declare_parameter('conf_threshold', 0.89)
         
         self.trt = None
         self.timer = None
@@ -97,21 +99,21 @@ class SpatialPerceptionNode(LifecycleNode):
 
             self.info_sub = self.create_subscription(
                 CameraInfo,
-                '/realsense/camera_info',
+                '/camera/camera_info',
                 self.info_cb,
                 qos_profile_sensor_data
             )
 
             self.img_sub = self.create_subscription(
                 Image,
-                '/realsense/image',
+                '/camera/image_raw',
                 self.image_cb,
                 qos_profile_sensor_data
             )
 
             self.depth_sub = self.create_subscription(
                 Image,
-                '/realsense/depth_image',
+                '/camera/depth/image_raw',
                 self.depth_cb,
                 qos_profile_sensor_data
             )
@@ -172,7 +174,7 @@ class SpatialPerceptionNode(LifecycleNode):
         img, depth = self.buffer.get_pair()
 
         if img is None or depth is None:
-            self.get_logger().warn("No synced data yet")
+            self.get_logger().warn("Waiting for data...")
             return
 
         try:

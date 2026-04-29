@@ -1,0 +1,60 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <world name="warehouse_world">
+
+    <!-- Physics (correct for Gazebo 11) -->
+    <physics name="default_physics" type="ode">
+      <gravity>0 0 -9.8</gravity>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <!-- Warehouse environment -->
+    <include>
+      <uri>model://cafe</uri>
+    </include>
+
+    <!-- Camera rig -->
+    <include>
+      <name>my_camera</name>
+      <pose>2.5 0 1 0 0 -3.5</pose>
+      <uri>model://realsense_rig</uri>
+    </include>
+
+    <!-- Person -->
+    <include>
+      <name>person</name>
+      <pose>0 0 0.001 0 0 -3.5</pose>
+      <uri>model://person_standing</uri>
+    </include>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -1</direction>
+    </light>
+
+    <light type="spot" name="cone_spotlight">
+      <pose>1.0 0 5.0 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>1 1 1 1</specular>
+      <attenuation>
+        <range>30</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>0 0 -1</direction>
+      <spot>
+        <inner_angle>0.6</inner_angle>
+        <outer_angle>1.2</outer_angle>
+        <falloff>1.0</falloff>
+      </spot>
+    </light>
+
+  </world>
+</sdf>

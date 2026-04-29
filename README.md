@@ -124,4 +124,4 @@ python3 test/test_real_inference.py
 
 ## 📸 Example Output
 
-<img src="assets/output_2.jpg" width="750"/>
+<img src="assets/rqt_image_view.png" width="750"/>
