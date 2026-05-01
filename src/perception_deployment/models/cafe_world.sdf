@@ -22,10 +22,17 @@
       <uri>model://realsense_rig</uri>
     </include>
 
-    <!-- Person -->
+    <!-- Person 1 -->
     <include>
       <name>person</name>
       <pose>0 0 0.001 0 0 -3.5</pose>
+      <uri>model://person_standing</uri>
+    </include>
+
+    <!-- Person 2 -->
+    <include>
+      <name>person-1</name>
+      <pose>0 -1.0 0.001 0 0 -3.5</pose>
       <uri>model://person_standing</uri>
     </include>
 

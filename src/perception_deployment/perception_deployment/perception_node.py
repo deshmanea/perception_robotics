@@ -167,8 +167,6 @@ class SpatialPerceptionNode(LifecycleNode):
             return
         
         self.frame_count += 1
-        self.get_logger().info("loop alive")
-
         t_e2e_start = time.perf_counter()
 
         img, depth = self.buffer.get_pair()
@@ -183,15 +181,12 @@ class SpatialPerceptionNode(LifecycleNode):
 
             img_input = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            self.get_logger().info(
-                f"Input stats -> shape: {img_input.shape}, "
-                f"min: {img_input.min()}, max: {img_input.max()}, dtype: {img_input.dtype}"
-            )
-
             detections = self.trt.run(img_input, conf_th)
 
             if detections is None or len(detections) == 0:
                 return
+            
+            vis = img.copy()
 
             detections = np.array(detections, dtype=np.float32)
             if detections.ndim == 1:
@@ -217,6 +212,9 @@ class SpatialPerceptionNode(LifecycleNode):
 
             h, w = depth.shape[:2]
 
+            best = None
+            best_z = float('inf')
+
             for det in detections:
                 x1, y1, x2, y2, obj_conf, cls = det
 
@@ -228,12 +226,44 @@ class SpatialPerceptionNode(LifecycleNode):
                 if x2 <= x1 or y2 <= y1:
                     continue
 
-                roi = depth[y1:y2, x1:x2]
+                # --- DRAW ORIGINAL BOX ---
+                cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+                # 1. Shrink box to center (avoid edges)
+                pad_x = int((x2 - x1) * 0.3)
+                pad_top = int((y2 - y1) * 0.2)
+                pad_bottom = int((y2 - y1) * 0.5)
+
+                cx1 = x1 + pad_x
+                cy1 = y1 + pad_top
+                cx2 = x2 - pad_x
+                cy2 = y2 - pad_bottom
+
+                if cx2 <= cx1 or cy2 <= cy1:
+                    continue
+
+                # --- DRAW CENTER BOX ---
+                cv2.rectangle(vis, (cx1, cy1), (cx2, cy2), (0, 255, 0), 2)
+
+                roi = depth[cy1:cy2, cx1:cx2]
 
                 if roi.size == 0:
                     continue
 
-                z = float(np.nanmedian(roi))
+                # 2. Flatten and filter valid depth
+                mask = np.isfinite(roi) & (roi > 0.2) & (roi < 5.0)
+                valid = roi[mask]
+
+                # --- DRAW VALID PIXELS (RED) ---
+                ys, xs = np.where(mask)
+                vis[cy1 + ys, cx1 + xs] = (0, 0, 255)
+
+                # 3. If too few good pixels → skip
+                if len(valid) < 20:
+                    continue
+
+                # 4. Take robust depth (NOT simple median)
+                z = float(np.percentile(valid, 40))
 
                 if not np.isfinite(z) or z <= 0:
                     continue
@@ -241,13 +271,33 @@ class SpatialPerceptionNode(LifecycleNode):
                 if not (0.2 < z < 5.0):
                     continue
 
-                u = (x1 + x2) // 2
-                v = (y1 + y2) // 2
+                u = (cx1 + cx2) // 2
+                v = (cy1 + cy2) // 2
+
+                cv2.circle(vis, (u, v), 5, (0, 255, 255), -1)
 
                 X = (u - self.cx) * z / self.fx
                 Y = (v - self.cy) * z / self.fy
 
-                self.target_pub.publish(Point(x=X, y=Y, z=z))
+                if z < best_z:
+                    best_z = z
+                    best = (X, Y, z)
+
+            if best is not None:
+                X, Y, z = best
+
+                current = np.array([X, Y, z])
+
+                if not hasattr(self, "prev"):
+                    self.prev = current
+
+                alpha = 0.8
+                smoothed = alpha * self.prev + (1 - alpha) * current
+                self.prev = smoothed
+
+                X, Y, z = smoothed
+
+                self.target_pub.publish(Point(x=float(X), y=float(Y), z=float(z)))
 
             self.e2e_times.append(time.perf_counter() - t_e2e_start)
 
@@ -257,6 +307,9 @@ class SpatialPerceptionNode(LifecycleNode):
             # log every 30 frames (avoid spam)
             if self.frame_count % self.log_interval == 0 and len(self.e2e_times) > 0:
                 self.log_stats()
+            
+            cv2.imshow("debug_depth_pixels", vis)
+            cv2.waitKey(1)
 
         except Exception as e:
             self.get_logger().error(f"Inference error: {e}")
