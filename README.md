@@ -65,7 +65,7 @@ Depth Image ──────────────────────�
 * ROS2 Lifecycle (Managed node) based system design
 
 ---
-## 🔧 Setup
+## Setup
 
 ### 1. Requirements
 
@@ -81,7 +81,7 @@ Depth Image ──────────────────────�
 
 
 ---
-## Project Structure
+### 2. Project Structure
 
 ```
 └── perception_robotics
@@ -119,7 +119,7 @@ Depth Image ──────────────────────�
 
 
 
-### 2. Instructions to Run
+### 3. Instructions to Run
 
 ```
 # Clone 
@@ -174,7 +174,7 @@ ros2 lifecycle set /perception_engine activate
 
 ---
 
-## 🧪 Pipeline Details
+## Pipeline Details
 
 ### Preprocessing
 
