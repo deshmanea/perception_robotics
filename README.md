@@ -18,7 +18,7 @@ human-robot interaction
 
 ---
 
-## 📌 System Overview
+## System Overview
 
 Below is multi-stage perception pipeline:
 
