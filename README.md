@@ -1,4 +1,4 @@
-# Perception in robotics
+# Real-Time RGB-D 3D Perception (ROS2 + TensorRT)
 
 #### Real-time RGB-D perception pipeline for estimating stable 3D target positions using GPU-accelerated inference.
 
@@ -42,7 +42,7 @@ Depth Image ──────────────────────�
 
 ---
 
-## Performance - [Currently pure py-cuda tensorrt]
+## Performance - [py-cuda + tensorrt, RTX 4070]
 
 | Stage       | Latency     |
 | ----------- | ----------- |
@@ -134,7 +134,7 @@ colcon build --packages-select perception_deployment --symlink-install
 source install/setup.bash
 
 ___________________________________________________________________________________________________
-# Terminal 1
+# Terminal 1 - Run Gazebo Simulation
 
 cd ~/ros2_ws/src/perception_robotics/src/perception_deployment/models
 gazebo cafe_world.sdf
@@ -146,7 +146,7 @@ ________________________________________________________________________________
 
 confirm -> ros2 topic list
 ________________________________________________________________________________________________
-# Terminal 2
+# Terminal 2 - Run Perception Node
 
 cd ~/ros2_ws/src/perception_robotics/src/perception_deployment/perception_deployment
 
@@ -158,7 +158,7 @@ source /home/abhijit/ros2_ws/.venv/bin/activate
 python3 perception_node.py
 
 ________________________________________________________________________________________________
-# Terminal 3
+# Terminal 3 - Activate Ros Lifecycle Node
 
 cd ~/ros2_ws/src/perception_robotics/src/perception_deployment
 source /opt/ros/humble/setup.bash
@@ -212,10 +212,10 @@ ros2 lifecycle set /perception_engine activate
 
 Next steps toward production-level perception:
 
-    [] RGB–Depth synchronization (message_filters)
+    - [] RGB–Depth synchronization (message_filters)
 
-    [] Object tracking (temporal consistency)
+    - [] Object tracking (temporal consistency)
 
-    [] Kalman Filter for state estimation
+    - [] Kalman Filter for state estimation
 
-    [] Multi-object handling
+    - [] Multi-object handling
